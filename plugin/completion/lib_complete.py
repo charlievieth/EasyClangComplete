@@ -164,7 +164,9 @@ class Completer(BaseCompleter):
                 self.tu = trans_unit
                 self.save_errors(self.tu.diagnostics)  # Store for the future.
             except Exception as e:
-                log.error("error while compiling: %s", e)
+                # WARN (CEV)
+                log.exception("error while compiling: %s", e)
+                # log.error("error while compiling: %s", e)
             end = time.time()
             log.debug("compilation done in %s seconds", end - start)
 

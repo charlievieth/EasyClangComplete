@@ -35,6 +35,9 @@ from .flags_sources.compilation_db import CompilationDb
 
 log = logging.getLogger("ECC")
 
+# WARN (CEV)
+PREFERRED_CXX = '-std=c++14'
+
 TOO_MANY_STD_FLAGS_ERROR_MSG = """
 Your {which_settings} define too many std flags:
 {std_flags}
@@ -161,6 +164,30 @@ class ViewConfig(object):
         return False
 
     @staticmethod
+    def __remove_file_arguments(args):
+        """The '-c' and '-o' flags piss off clang - so remove them"""
+        removed = []
+        while '-c' in args:
+            n = args.index('-c')
+            if n + 2 <= len(args):
+                removed += args[n: n + 2]
+                del args[n: n + 2]
+            else:
+                removed += args[n: n + 1]
+                del args[n]
+        while '-o' in args:
+            n = args.index('-o')
+            if n + 2 <= len(args):
+                removed += args[n: n + 2]
+                del args[n: n + 2]
+            else:
+                removed += args[n: n + 1]
+                del args[n]
+        if removed:
+            log.info("removed compile flags: %s", removed)
+        return args
+
+    @staticmethod
     def __generate_essentials(view, settings):
         """Generate essentials. Flags and empty Completer. This is fast.
 
@@ -188,6 +215,8 @@ class ViewConfig(object):
         flags_as_str_list = []
         for flag in flags:
             flags_as_str_list += flag.as_list()
+        # WARN (CEV): figure out if removing these flags conflicts with anything else
+        # flags_as_str_list = ViewConfig.__remove_file_arguments(flags_as_str_list)
         return (completer, flags_as_str_list)
 
     @staticmethod
@@ -211,6 +240,28 @@ class ViewConfig(object):
         source_std_flags_indices = [
             i for i, flag in enumerate(source_flags)
             if flag.body.startswith('-std=')]
+
+        # CEV: remove extra -std flags
+        # TODO (CEV): simplify
+        if len(source_std_flags_indices) > 1:
+            have_preferred = False
+            for i in source_std_flags_indices:
+                if source_flags[i].body == PREFERRED_CXX:
+                    have_preferred = True
+                    break
+
+            if have_preferred:
+                delete_indices = [
+                    i for i in source_std_flags_indices
+                    if source_flags[i].body != PREFERRED_CXX]
+                # Reverse otherwise index will change as we remove elements
+                delete_indices.sort(reverse=True)
+                for i in delete_indices:
+                    del source_flags[i]
+                # rebuild indices (I'm lazy)
+                source_std_flags_indices = [
+                    i for i, flag in enumerate(source_flags)
+                    if flag.body.startswith('-std=')]
 
         # Perform checks for user's settings.
         if len(lang_std_flag_indices) > 1:
@@ -238,6 +289,8 @@ class ViewConfig(object):
         # Combine all flags into a unique list and return it.
         flags = UniqueList()
         flags += init_flags + lang_flags + common_flags + source_flags
+        # WARN (CEV): way too noisy!
+        # log.info('flags: {}'.format(flags))
         return flags
 
     @staticmethod
